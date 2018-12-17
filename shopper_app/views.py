@@ -1,16 +1,14 @@
 import json
 from django.urls import reverse_lazy
 from django.http import JsonResponse
-
 from django.conf import settings
+from django.shortcuts import render
 from django import forms
-
-# generic views docs: https://docs.djangoproject.com/en/2.1/ref/class-based-views/
 from django.views import generic 
+from geopy import distance, Nominatim
+from .models import Item, GeoLoc, ItemLocation, ItemResultsRestView
 
-from .models import Item, GeoLoc, ItemLocation
 
-# (e.g., HOME_LOC['latitude'] or HOME_LOC['longitude'])
 HOME_LOC = settings.DEFAULT_LOC 
 
 class HomeView(generic.TemplateView):
@@ -24,6 +22,8 @@ class ItemView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super(ItemView, self).get_context_data(**kwargs)
         item_obj = self.get_object()
+        item_loc = ItemLocation()
+        context['locations'] = item_obj.locations.all()
 
         return context
 
@@ -33,81 +33,76 @@ class ItemListView(generic.ListView):
     template_name = 'item_list.html'
 
 
+class SearchForm(forms.Form):
+    items = forms.ModelMultipleChoiceField(queryset=Item.objects.all(), widget=forms.widgets.CheckboxSelectMultiple)
+
+
+class SelectItemsView(generic.ListView):
+    model = Item
+    template_name = 'shop.html'
+
+
 class ItemCreateView(generic.CreateView):
     model = Item                     # Object we want to create
     template_name = 'item_add.html'  # template that displays the form
     
     # list of attributes we want to display widgets for...
     fields = ['name', 'price', 'image_url']
-    success_url = reverse_lazy('item_list')
-
-
-class SearchForm(forms.Form):
-    items = forms.ModelMultipleChoiceField(queryset=Item.objects.all(), widget=forms.widgets.CheckboxSelectMultiple)
-
-
-class SelectItemsView(generic.TemplateView):
-    template_name = 'shop.html'
+    success_url = reverse_lazy
 
 
 
 # REST API # 
-class ItemsResultsRestView(generic.View):
-    """RESTful api to access item database.
-    /shop/rest/ takes post data and returns json response containing
-    item objects that are within minimal distance to a default location.
-
-    response structure
-    data = 
-        {
-        'items': [], 
-        'miles': miles, 
-        'cost': total_cost
-        }
-
-    items:  list of item objects that are minimal distance to origin.
-        structure for each item object:
-        
-        {
-            'name': item's name, 
-            'price': item's price, 
-            'lat': item's latitude, 
-            'lon': item's longitude, 
-            'image_url': item's image url
-        }
-
-    miles:  number of miles required to fetch each item at each location. The
-            total distance traversing the path of locations.
-
-    total_cost: The total cost of all item objects selected in form. 
-    """
+class ItemsResultsRestView(generic.ListView):
 
     def post(self, request, *args, **kwargs):
-        """Handle post requests from client form using AJAX.
-        """
+
         form = SearchForm(request.POST)
-        miles = 0       # total number miles to fetch all items
-        total_cost = 0  # total cost of all items
+        a = (-71.312796, 41.49008)
+        b = (-71.312796, 41.49008)
+        miles = distance.distance(a, b).miles # 
+
+        total_cost = 0 
         
-        # data dict sent back to client as response 
+        name = []
+        price = 0
+        lat = 0    
+        lon = 0
+
         data = {'items': [], 'miles': miles, 'cost': total_cost}
-        # Note: each item in 'items' list is a dict in itself and should be structured as outlined above.
 
         if form.is_valid:
-            # Extract selected items (checked items from form) and build list of item objects
+
             form_data = request.POST.getlist('items')
             item_objects = [] 
-            for i in form_data:
-                item_obj = Item.objects.get(pk=i)
+            
+            for item in form_data:
+                item_obj = Item.objects.get(pk=item)
                 item_objects.append(item_obj)
         
             #  Begin here to determine optimal item location for each item in item_objects list
-
+            home_location = (HOME_LOC['latitude'], HOME_LOC['longitude'])
+            
+            for item in item_objects:
+                locations = item.locations.all()
+                min_location = (locations[0].location.lat, locations[0].location.lon)
+                min_miles = distance.distance(min_location, home_location)
+                
+                for j in locations:
+                    location = (j.location.lat, j.location.lon)
+                    new_distance = distance.distance(location, home_location).miles
+                    
+                    if new_distance < min_miles:
+                        min_miles = new_distance
+                        min_location = j
+                
+                data['items'].append({
+                    'name': min_location.item.name, 
+                    'price': min_location.item.price,
+                    'lat': min_location.location.lat,
+                    'lon': min_location.location.lon})
+                data['miles'] = data['miles'] +new_distance
+                data['cost'] = data['cost'] + min_location.item.price
 
             # End local edits here.
-
         return JsonResponse(data, safe=False)
-        
-
-
-

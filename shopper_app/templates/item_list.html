@@ -9,7 +9,7 @@
         <ul class="list-unstyled">
         {% for item in object_list %} 
            <li>
-               <a class="btn btn-link" href="{% url 'item' item.pk %}">{{ item.name }} ${{ item.price }}</a>                
+               <a class="btn btn-link" href="{% url 'item' item.pk %}">${{ item.price }} {{ item.name }}</a>                
            </li>
         {% endfor %}
         </ul>

@@ -17,8 +17,11 @@
 
     	<h5>Available at the following locations</h5>
     	<ul class="list-unstyled">
-    		
+    		{% for item in locations %}
+    			<li> {{ item.location }} </li>
+    		{% endfor %}
     	</ul>	
+    		
 	</div>
 
 </div>

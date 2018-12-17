@@ -2,6 +2,20 @@
 
 {% block content_body %}
 
+
+    <form id="item_selection_form" method="post">{% csrf_token %}
+        <ul class="list-unstyled">
+        {% for item in object_list %} 
+            <li><input type="checkbox" name="items" value="{{ item.pk }}"> {{ item.name }}
+                        {% for item in locations %}
+                <li> {{ item.location }} </li>
+    
+            {% endfor %} </li>
+        {% endfor %}
+        </ul>
+        <button type="submit" id="submit_btn">submit</button>
+    </form>
+
 <div class="row">
 	<div class="col-md-12">
 		<h2>Add a New Item</h2>
